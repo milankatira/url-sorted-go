@@ -3,7 +3,9 @@ package main
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -44,9 +46,54 @@ func getURL(id string) (URL, error) {
 	return url, nil
 }
 
+func handler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello, World!")
+}
+
+func ShortURLHandler(w http.ResponseWriter, r *http.Request) {
+	var data struct {
+		URL string `json:"url"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	shortURL := createURL(data.URL)
+
+	response := struct {
+		ShortURL string `json:"short_url"`
+	}{
+		ShortURL: shortURL,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func redirectURLHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Path[len("/redirect/"):]
+	fmt.Printf("%s\n", id)
+	url, err := getURL(id)
+
+	fmt.Printf("%v\n", url.OriginalURL)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	http.Redirect(w, r, url.OriginalURL, http.StatusFound)
+}
+
 func main() {
-	fmt.Println("Hello, World!")
-	OriginalURL := "https://www.baidu.com"
-	ShortURL := generateShortURL(OriginalURL)
-	fmt.Println(ShortURL)
+	http.HandleFunc("/health", handler)
+	http.HandleFunc("/short", ShortURLHandler)
+
+	http.HandleFunc("/redirect", redirectURLHandler)
+
+	err := http.ListenAndServe(":8000", nil)
+	if err != nil {
+		fmt.Println("Error on staring server", err)
+	}
 }
